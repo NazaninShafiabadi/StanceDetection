@@ -3,3 +3,5 @@ datasets
 torch
 transformers
 accelerate
+numpy
+pandas

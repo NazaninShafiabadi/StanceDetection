@@ -5,16 +5,29 @@ python src/finetune.py \
 --model="xlm-roberta-base" \
 --train_file="data/xstance/train.jsonl" \
 --val_file="data/xstance/valid.jsonl" \
---output_dir="stance_classifier" \
+--output_dir="models/binary_stance_classifier" \
 --balance_by language label \
+--max_len=128 \
 --num_epochs=10 \
 --batch_size=128
+--ignore_questions
+
+python src/finetune.py \
+--model="xlm-roberta-base" \
+--train_file="data/xstance/train.jsonl" \
+--val_file="data/xstance/valid.jsonl" \
+--output_dir="stance_classifier" \
+--balance_by language label \
+--label_column='numerical_label' \
+--num_labels=4 \
+--num_epochs=10 \
+--batch_size=128 \
+--average='micro'
 """
 
 
 import os
 import argparse
-from datasets import Dataset
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import shutil
 import torch
@@ -25,7 +38,7 @@ from transformers import AutoTokenizer, \
     Trainer, \
     logging, \
     EarlyStoppingCallback
-from preprocessing import read_data, balance_data, preprocess, tokenize
+from preprocessing import InputPreprocessor
 
 warnings.filterwarnings("ignore")
 logging.set_verbosity_error()
@@ -42,46 +55,43 @@ def create_parser():
     parser.add_argument('--val_file', required=True, type=str, help='Path to validation data')
     parser.add_argument('--output_dir', default='finetuned_model', type=str, help='Output directory')
     parser.add_argument('--balance_by', default=None, nargs='+', help='List of attributes (column names) to balance by. Separate by space.')
+    parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
+    parser.add_argument('--ignore_questions', action='store_true', help='Ignore questions during tokenization')
+    parser.add_argument('--ignore_comments', action='store_true', help='Ignore comments during tokenization')
+    parser.add_argument('--label_column', default='label', type=str, help='Label column name')
     parser.add_argument('--num_labels', default=2, type=int, help='Number of labels')
     parser.add_argument('--num_epochs', default=3, type=int, help='Number of training epochs')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
+    parser.add_argument('--average', default='binary', type=str, help='Average method for metrics. Choose from: binary, micro, macro, weighted')
     return parser
 
 
 def compute_metrics(pred):
     logits, labels = pred
     predictions = logits.argmax(axis=-1)
+    print(f'True Labels: {labels[:20]}')
+    print(f'Predictions: {predictions[:20]}')
     precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='binary')
     acc = accuracy_score(labels, predictions)
     return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
 
 
 def main(args):
-    # Read data
-    train_df = read_data(args.train_file)
-    valid_df = read_data(args.val_file)
-        
-    # Balance data if needed
-    if args.balance_by:
-        train_df = balance_data(train_df, args.balance_by)
-        valid_df = balance_data(valid_df, args.balance_by)
-
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=args.num_labels).to(DEVICE)
 
-    # Prepare data
-    prep_train = preprocess(train_df)
-    train_cms = prep_train['comment'].tolist()
-    train_labels = prep_train['label'].to_list()
-    train = tokenize(train_cms, tokenizer, train_labels, DEVICE)
-    train_dataset = Dataset.from_dict(train)
+    input_preprocessor = InputPreprocessor(tokenizer, 
+                                           max_len=args.max_len, 
+                                           ignore_questions=args.ignore_questions, 
+                                           ignore_comments=args.ignore_comments,
+                                           device=DEVICE
+                                           )
+    trainset = input_preprocessor.process(args.train_file, label_column=args.label_column, balance_by=args.balance_by)
+    print(trainset)
 
-    prep_valid = preprocess(valid_df)
-    val_cms = prep_valid['comment'].to_list()
-    val_labels = prep_valid['label'].to_list()
-    valid = tokenize(val_cms, tokenizer, val_labels, DEVICE)
-    valid_dataset = Dataset.from_dict(valid)
+    validset = input_preprocessor.process(args.val_file, label_column=args.label_column)
+    print(validset)
     
     training_args = TrainingArguments(
     output_dir=args.output_dir,
@@ -106,8 +116,8 @@ def main(args):
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=valid_dataset,
+        train_dataset=trainset,
+        eval_dataset=validset,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
         callbacks=[early_stopping]
@@ -129,6 +139,9 @@ def main(args):
     shutil.copy(os.path.join(best_ckpt, 'trainer_state.json'), os.path.join(best_model_dir, 'trainer_state.json'))
 
     print(f"Best model saved to {best_model_dir}")
+
+    # Save label mapping for consistency during inference
+    input_preprocessor.save_label_mapping(os.path.join(args.output_dir, 'label_mapping.json'))
 
 
 if __name__ == "__main__":

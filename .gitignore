@@ -1,15 +1,18 @@
-# Ignore data files
+# Data files
 # data/
 
-# Ignore model outputs
+# Model outputs
 models/
 
-# Ignore Python cache files
+# Python cache files
 __pycache__/
 *.pyc
 
-# Ignore Jupyter Notebook checkpoints
+# Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
-# Ignore virtual environment
+# Virtual environment
 venv/
+
+# Other files
+draft.ipynb
