@@ -3,9 +3,7 @@ import pandas as pd
 from typing import List, Optional
 import torch
 import zipfile
-import json
-import numpy as np
-import yaml
+import pickle
 
 
 def read_data_to_df(file_path):
@@ -143,9 +141,9 @@ class InputPreprocessor:
     #         self.label_mapping = json.load(f)
 
     def save_label_mapping(self, filepath: str):
-        with open(filepath, 'w') as f:
-            yaml.dump(self.label_mapping, f)
+        with open(filepath, 'wb') as f:  
+            pickle.dump(self.label_mapping, f)
 
     def load_label_mapping(self, filepath: str):
-        with open(filepath, 'r') as f:
-            self.label_mapping = yaml.safe_load(f)
+        with open(filepath, 'rb') as f:  
+            self.label_mapping = pickle.load(f)

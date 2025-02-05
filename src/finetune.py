@@ -16,7 +16,7 @@ python src/finetune.py \
 --model="xlm-roberta-base" \
 --train_file="data/xstance/train.jsonl" \
 --val_file="data/xstance/valid.jsonl" \
---output_dir="models/multi-cls_stance_classifier" \
+--output_dir="models/multi_micro_stance_classifier" \
 --balance_by language label \
 --max_len=256 \
 --label_column='numerical_label' \
