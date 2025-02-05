@@ -16,8 +16,9 @@ python src/finetune.py \
 --model="xlm-roberta-base" \
 --train_file="data/xstance/train.jsonl" \
 --val_file="data/xstance/valid.jsonl" \
---output_dir="stance_classifier" \
+--output_dir="models/multi-cls_stance_classifier" \
 --balance_by language label \
+--max_len=256 \
 --label_column='numerical_label' \
 --num_labels=4 \
 --num_epochs=10 \
@@ -66,14 +67,21 @@ def create_parser():
     return parser
 
 
-def compute_metrics(pred):
-    logits, labels = pred
-    predictions = logits.argmax(axis=-1)
-    print(f'True Labels: {labels[:20]}')
-    print(f'Predictions: {predictions[:20]}')
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='binary')
-    acc = accuracy_score(labels, predictions)
-    return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
+# def compute_metrics(pred):
+#     logits, labels = pred
+#     predictions = logits.argmax(axis=-1)
+#     precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='binary')
+#     acc = accuracy_score(labels, predictions)
+#     return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
+
+def compute_metrics(average_method):
+    def _compute_metrics(pred):
+        logits, labels = pred
+        predictions = logits.argmax(axis=-1)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average=average_method)
+        acc = accuracy_score(labels, predictions)
+        return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
+    return _compute_metrics
 
 
 def main(args):
@@ -88,10 +96,7 @@ def main(args):
                                            device=DEVICE
                                            )
     trainset = input_preprocessor.process(args.train_file, label_column=args.label_column, balance_by=args.balance_by)
-    print(trainset)
-
     validset = input_preprocessor.process(args.val_file, label_column=args.label_column)
-    print(validset)
     
     training_args = TrainingArguments(
     output_dir=args.output_dir,
@@ -100,12 +105,14 @@ def main(args):
     logging_strategy="epoch",
     logging_dir=os.path.join(args.output_dir, 'logs'),
     learning_rate=2e-5,
+    warmup_ratio=0.1,  # Use 10% of training steps for warm-up
     per_device_train_batch_size=args.batch_size,
     per_device_eval_batch_size=args.batch_size,
     num_train_epochs=args.num_epochs,
     weight_decay=0.01,
     load_best_model_at_end=True,
     metric_for_best_model="accuracy",
+    # fp16=True if DEVICE=='cuda' else False  # Enable mixed precision
     )
 
     early_stopping = EarlyStoppingCallback(
@@ -119,7 +126,7 @@ def main(args):
         train_dataset=trainset,
         eval_dataset=validset,
         tokenizer=tokenizer,
-        compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics(args.average),
         callbacks=[early_stopping]
     )
 

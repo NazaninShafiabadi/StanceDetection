@@ -5,6 +5,7 @@ import torch
 import zipfile
 import json
 import numpy as np
+import yaml
 
 
 def read_data_to_df(file_path):
@@ -133,10 +134,18 @@ class InputPreprocessor:
         
         return dataset
     
+    # def save_label_mapping(self, filepath: str):
+    #     with open(filepath, 'w') as f:
+    #         json.dump(self.label_mapping, f)
+
+    # def load_label_mapping(self, filepath: str):
+    #     with open(filepath, 'r') as f:
+    #         self.label_mapping = json.load(f)
+
     def save_label_mapping(self, filepath: str):
         with open(filepath, 'w') as f:
-            json.dump(self.label_mapping, f)
+            yaml.dump(self.label_mapping, f)
 
     def load_label_mapping(self, filepath: str):
         with open(filepath, 'r') as f:
-            self.label_mapping = json.load(f)
+            self.label_mapping = yaml.safe_load(f)
