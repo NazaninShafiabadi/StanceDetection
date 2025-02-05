@@ -9,19 +9,20 @@ Sample usage:
 
 python src/translate.py \
 --model="facebook/nllb-200-distilled-600M" \
---article="data/xstance/test_it.jsonl" \
+--dataset="ZurichNLP/x_stance" \
+--split="test" \
 --src_lang="ita_Latn" \
 --tgt_lang="fra_Latn" \
 --batch_size=128 \
+--max_len=256 \
 --output_file="translations/it2fr.csv"
 """
 
-import pandas as pd
 import argparse
+from datasets import load_dataset
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, logging
 from tqdm import tqdm
-from preprocessing import read_data, preprocess, tokenize
 
 logging.set_verbosity_error()
 
@@ -33,9 +34,11 @@ print(f'Using device: {DEVICE}')
 def create_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='facebook/nllb-200-distilled-600M', type=str, help='Model name or path')
-    parser.add_argument('--article', required=True, type=str, help='Article to translate')
+    parser.add_argument('--dataset', required=True, type=str, help='HuggingFace dataset')
+    parser.add_argument('--split', required=True, type=str, help='Dataset split')
     parser.add_argument('--src_lang', required=True, type=str, help='Source language')
     parser.add_argument('--tgt_lang', required=True, type=str, help='Target language')
+    parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     parser.add_argument('--output_file', default='translations.csv', type=str, help='Output directory')
     return parser
@@ -49,33 +52,29 @@ def main(args):
     )
     model = AutoModelForSeq2SeqLM.from_pretrained(args.model).to(DEVICE)
 
-    # Prepare the input data
-    article = read_data(args.article)
-    preprocessed = preprocess(article)
-    sentences = preprocessed['comment'].to_list()
+    # Prepare inputs
+    print('Preparing inputs...')
+    dataset = load_dataset(args.dataset, split=args.split)
+    filtered_dataset = dataset.filter(lambda x: x['language'] == args.src_lang[:2])
+    data_loader = torch.utils.data.DataLoader(filtered_dataset, batch_size=args.batch_size)
+
+    sep_token = tokenizer.sep_token
     
+    # Translate
     translations = []
-    for i in tqdm(range(0, len(sentences), args.batch_size), desc="Translating"):
-        batch_sentences = sentences[i : i + args.batch_size]
-        inputs = tokenize(batch_sentences, tokenizer, device=DEVICE)
-
-        # Generate translations for the batch
-        translated_tokens = model.generate(
-            **inputs,
-            forced_bos_token_id=tokenizer.convert_tokens_to_ids(args.tgt_lang),
-            max_length=128,
-            num_beams=4,
-            early_stopping=True
-        )
-
-        # Decode translations
-        batch_translations = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        translations.extend(batch_translations)
-
-    # Save translations to file
-    output = pd.concat([article.drop(columns=['comment']), pd.Series(translations, name='comment')], axis=1)
-    output.to_csv(args.output_file, index=False)
+    for batch in tqdm(data_loader, desc="Translating", unit="batch"):
+        input_texts = [q + f' {sep_token} ' + c for q, c in zip(batch["question"], batch["comment"])]
+        inputs = tokenizer(input_texts, padding='longest', truncation=True, max_length=args.max_len, return_tensors='pt').to(DEVICE)
+        outputs = model.generate(**inputs, 
+                                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(args.tgt_lang))
+        translations.extend(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+    
+    # Save translations 
+    filtered_dataset = filtered_dataset.add_column('translation', translations)
+    filtered_dataset.to_csv(args.output_file, index=False)
     print(f'Translations saved to {args.output_file}')
+
+    return
 
 
 if __name__ == '__main__':
