@@ -148,7 +148,7 @@ def main(args):
     print(f"Best model saved to {best_model_dir}")
 
     # Save label mapping for consistency during inference
-    input_preprocessor.save_label_mapping(os.path.join(args.output_dir, 'label_mapping.json'))
+    input_preprocessor.save_label_mapping(os.path.join(args.output_dir, 'label_mapping.pickle'))
 
 
 if __name__ == "__main__":

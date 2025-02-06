@@ -1,8 +1,8 @@
 from datasets import Dataset
 import pandas as pd
-from typing import List, Optional
-import torch
-import zipfile
+from typing import List, Optional, Union
+# import torch
+# import zipfile
 import pickle
 
 
@@ -19,37 +19,37 @@ def read_data_to_df(file_path):
     return df
 
 
-def read_zip_file_as_df(zip_file_path):
-    """Reads files from a zip archive into a list of pandas DataFrames."""
-    dfs = []
-    file_readers = {
-        '.csv': pd.read_csv,
-        '.json': pd.read_json,
-        '.jsonl': lambda f: pd.read_json(f, lines=True),
-        '.xlsx': pd.read_excel,
-    }
+# def read_zip_file_as_df(zip_file_path):
+#     """Reads files from a zip archive into a list of pandas DataFrames."""
+#     dfs = []
+#     file_readers = {
+#         '.csv': pd.read_csv,
+#         '.json': pd.read_json,
+#         '.jsonl': lambda f: pd.read_json(f, lines=True),
+#         '.xlsx': pd.read_excel,
+#     }
 
-    try:
-        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-            for file_info in zip_ref.infolist():
-                # print(f"File Name: {file_info.filename}")
-                ext = file_info.filename.split('.')[-1].lower()
-                reader = file_readers.get(f'.{ext}')
+#     try:
+#         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+#             for file_info in zip_ref.infolist():
+#                 # print(f"File Name: {file_info.filename}")
+#                 ext = file_info.filename.split('.')[-1].lower()
+#                 reader = file_readers.get(f'.{ext}')
 
-                if reader:
-                    with zip_ref.open(file_info) as file:
-                        dfs.append(reader(file))
-                else:
-                    print(f"Unsupported file format: {file_info.filename}")
+#                 if reader:
+#                     with zip_ref.open(file_info) as file:
+#                         dfs.append(reader(file))
+#                 else:
+#                     print(f"Unsupported file format: {file_info.filename}")
 
-    except FileNotFoundError:
-        print(f"Error: Zip file not found at {zip_file_path}")
-    except zipfile.BadZipFile:
-        print(f"Error: Invalid zip file at {zip_file_path}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+#     except FileNotFoundError:
+#         print(f"Error: Zip file not found at {zip_file_path}")
+#     except zipfile.BadZipFile:
+#         print(f"Error: Invalid zip file at {zip_file_path}")
+#     except Exception as e:
+#         print(f"An unexpected error occurred: {e}")
 
-    return dfs
+#     return dfs
 
 
 def balance_df(df, columns:List, rs=42):
@@ -66,22 +66,22 @@ def balance_df(df, columns:List, rs=42):
     return balanced_df.sample(frac=1).reset_index(drop=True)    # shuffle the rows
 
 
-def preprocess(df, columns_to_keep=['comment', 'label'], encode_label=True):
-    preprocessed_df = df[columns_to_keep]
-    if encode_label:
-        preprocessed_df.loc[:, 'label'] = preprocessed_df['label'].map({'FAVOR': 1, 'AGAINST': 0})
-    return preprocessed_df
+# def preprocess(df, columns_to_keep=['comment', 'label'], encode_label=True):
+#     preprocessed_df = df[columns_to_keep]
+#     if encode_label:
+#         preprocessed_df.loc[:, 'label'] = preprocessed_df['label'].map({'FAVOR': 1, 'AGAINST': 0})
+#     return preprocessed_df
 
 
-def tokenize(sentences:List, tokenizer, labels=None, device='cpu'):
-    inputs = tokenizer(sentences, 
-                       truncation=True,
-                       padding=True,
-                       max_length=128,
-                       return_tensors="pt").to(device)
-    if labels:
-        inputs['labels'] = torch.tensor(labels).to(device)
-    return inputs
+# def tokenize(sentences:List, tokenizer, labels=None, device='cpu'):
+#     inputs = tokenizer(sentences, 
+#                        truncation=True,
+#                        padding=True,
+#                        max_length=128,
+#                        return_tensors="pt").to(device)
+#     if labels:
+#         inputs['labels'] = torch.tensor(labels).to(device)
+#     return inputs
 
 
 class InputPreprocessor:
@@ -114,7 +114,7 @@ class InputPreprocessor:
             self.label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
         return labels.map(self.label_mapping).tolist()
     
-    def process(self, file, label_column: str = 'label', balance_by: Optional[List[str]] = None) -> Dataset:
+    def process(self, file, label_column: Union[str, None] = None, balance_by: Optional[List[str]] = None) -> Dataset:
         df = read_data_to_df(file)
 
         if balance_by:
@@ -123,22 +123,21 @@ class InputPreprocessor:
         token_list = df.apply(self._tokenize_and_combine, axis=1).tolist()
         padded_tokens = self.tokenizer.pad({'input_ids': token_list}, padding='longest')
         
-        labels = self._process_labels(df[label_column])
+        labels = self._process_labels(df[label_column]) if label_column else None
 
-        dataset = Dataset.from_dict({'input_ids': padded_tokens['input_ids'], 
-                                     'attention_mask': padded_tokens['attention_mask'], 
-                                     'labels': labels})
+        # dataset = Dataset.from_dict({
+        #     'input_ids': padded_tokens['input_ids'], 
+        #     'attention_mask': padded_tokens['attention_mask'], 
+        #     'labels': labels
+        #     })
+        dataset = Dataset.from_dict({ 
+            "input_ids": padded_tokens["input_ids"], 
+            "attention_mask": padded_tokens["attention_mask"], 
+            **({"labels": labels} if labels else {}) # only adds a labels key if labels is not None
+            })
         dataset.set_format(type='torch', device=self.device)
         
         return dataset
-    
-    # def save_label_mapping(self, filepath: str):
-    #     with open(filepath, 'w') as f:
-    #         json.dump(self.label_mapping, f)
-
-    # def load_label_mapping(self, filepath: str):
-    #     with open(filepath, 'r') as f:
-    #         self.label_mapping = json.load(f)
 
     def save_label_mapping(self, filepath: str):
         with open(filepath, 'wb') as f:  

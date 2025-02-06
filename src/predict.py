@@ -6,7 +6,6 @@ python src/predict.py \
 --test_file="data/xstance/test.jsonl" \
 --output_file="predictions/bi_test_preds.csv" \
 --batch_size=128 \
---label_column='label' \
 --label_mapping_file='models/binary_stance_classifier/label_mapping.json'
 
 python src/predict.py \
@@ -14,7 +13,6 @@ python src/predict.py \
 --test_file="data/xstance/test.jsonl" \
 --output_file="predictions/multi_macro_preds.csv" \
 --batch_size=128 \
---label_column='numerical_label' \
 --label_mapping_file='models/multi_macro_stance_classifier/label_mapping.json'
 """
 
@@ -37,7 +35,6 @@ def create_parser():
     parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
     parser.add_argument('--ignore_questions', action='store_true', help='Ignore questions during tokenization')
     parser.add_argument('--ignore_comments', action='store_true', help='Ignore comments during tokenization')
-    parser.add_argument('--label_column', default='label', type=str, help='Label column name')
     parser.add_argument('--label_mapping_file', default=None, type=str, help='Path to label mapping file')
     return parser
 
@@ -56,7 +53,7 @@ def predict(args):
         # Load label mapping
         input_preprocessor.load_label_mapping(args.label_mapping_file)
     
-    test_dataset = input_preprocessor.process(args.test_file, label_column=args.label_column)
+    test_dataset = input_preprocessor.process(args.test_file)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size)
     
     # Make predictions
@@ -64,8 +61,7 @@ def predict(args):
     predictions = []
     with torch.no_grad():
         for batch in test_loader:
-            # input_ids = batch['input_ids'] #.to(DEVICE)
-            outputs = model(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+            outputs = model(**batch)
             preds = outputs.logits.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
     

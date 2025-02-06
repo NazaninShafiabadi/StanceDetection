@@ -11,11 +11,11 @@ python src/translate.py \
 --model="facebook/nllb-200-distilled-600M" \
 --dataset="ZurichNLP/x_stance" \
 --split="test" \
---src_lang="ita_Latn" \
+--src_lang="deu_Latn" \
 --tgt_lang="fra_Latn" \
 --batch_size=128 \
---max_len=256 \
---output_file="translations/it2fr.csv"
+--max_len=128 \
+--output_file="translations/de2fr.csv"
 """
 
 import argparse
@@ -57,20 +57,26 @@ def main(args):
     dataset = load_dataset(args.dataset, split=args.split)
     filtered_dataset = dataset.filter(lambda x: x['language'] == args.src_lang[:2])
     data_loader = torch.utils.data.DataLoader(filtered_dataset, batch_size=args.batch_size)
-
-    sep_token = tokenizer.sep_token
     
     # Translate
-    translations = []
+    questions, comments = [], []
     for batch in tqdm(data_loader, desc="Translating", unit="batch"):
-        input_texts = [q + f' {sep_token} ' + c for q, c in zip(batch["question"], batch["comment"])]
-        inputs = tokenizer(input_texts, padding='longest', truncation=True, max_length=args.max_len, return_tensors='pt').to(DEVICE)
-        outputs = model.generate(**inputs, 
-                                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(args.tgt_lang))
-        translations.extend(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        tokenized_q = tokenizer(batch['question'], padding='longest', truncation=True, 
+                                max_length=args.max_len, return_tensors='pt').to(DEVICE)
+        tokenized_c = tokenizer(batch['comment'], padding='longest', truncation=True, 
+                                max_length=args.max_len, return_tensors='pt').to(DEVICE)
+        
+        translated_q = model.generate(**tokenized_q, forced_bos_token_id=tokenizer.convert_tokens_to_ids(args.tgt_lang))
+        translated_c = model.generate(**tokenized_c, forced_bos_token_id=tokenizer.convert_tokens_to_ids(args.tgt_lang))
+        
+        questions.extend(tokenizer.batch_decode(translated_q, skip_special_tokens=True))
+        comments.extend(tokenizer.batch_decode(translated_c, skip_special_tokens=True))
     
-    # Save translations 
-    filtered_dataset = filtered_dataset.add_column('translation', translations)
+    # Replace old values with new translations
+    filtered_dataset = filtered_dataset.map(lambda example, idx: {
+        "question": questions[idx], 
+        "comment": comments[idx]
+        }, with_indices=True)
     filtered_dataset.to_csv(args.output_file, index=False)
     print(f'Translations saved to {args.output_file}')
 
