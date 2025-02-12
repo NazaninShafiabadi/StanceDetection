@@ -9,18 +9,12 @@ python src/predict.py \
 --label_mapping_file='models/binary_stance_classifier/label_mapping.json'
 
 python src/predict.py \
---model='models/multi_macro_stance_classifier/best_model' \
+--model='models/ultra_balanced_stance_classifier/best_model' \
 --test_file="data/xstance/test.jsonl" \
---output_file="predictions/multi_macro_preds.csv" \
+--output_file="predictions/ub_preds.csv" \
 --batch_size=128 \
---label_mapping_file='models/multi_macro_stance_classifier/label_mapping.json'
+--label_mapping_file='models/ultra_balanced_stance_classifier/label_mapping.pickle'
 
-python src/predict.py \
---model='models/binary_stance_classifier/best_model' \
---test_file="translations/it2fr.csv" \
---output_file="predictions/it2fr_preds.csv" \
---batch_size=128 \
---label_mapping_file='models/binary_stance_classifier/label_mapping.json'
 """
 
 import argparse

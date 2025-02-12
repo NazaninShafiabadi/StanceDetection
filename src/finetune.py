@@ -10,7 +10,6 @@ python src/finetune.py \
 --max_len=128 \
 --num_epochs=10 \
 --batch_size=128
---ignore_questions
 
 python src/finetune.py \
 --model="xlm-roberta-base" \
