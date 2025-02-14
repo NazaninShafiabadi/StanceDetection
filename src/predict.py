@@ -9,17 +9,18 @@ python src/predict.py \
 --label_mapping_file='models/binary_stance_classifier/label_mapping.json'
 
 python src/predict.py \
---model='models/ultra_balanced_stance_classifier/best_model' \
---test_file="data/xstance/test.jsonl" \
---output_file="predictions/ub_preds.csv" \
+--model='models/binary_stance_classifier/best_model' \
+--test_file="translations/it2fr2it.csv" \
+--output_file="predictions/it2fr2it_preds.csv" \
 --batch_size=128 \
---label_mapping_file='models/ultra_balanced_stance_classifier/label_mapping.pickle'
+--label_mapping_file='models/binary_stance_classifier/label_mapping.json'
 
 """
 
 import argparse
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, logging
 import torch
+from tqdm import tqdm
 from preprocessing import read_data_to_df, InputPreprocessor
 
 logging.set_verbosity_error()
@@ -54,14 +55,14 @@ def predict(args):
         # Load label mapping
         input_preprocessor.load_label_mapping(args.label_mapping_file)
     
-    test_dataset = input_preprocessor.process(args.test_file)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size)
+    dataset = input_preprocessor.process(args.test_file)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Make predictions
     model.eval()
     predictions = []
     with torch.no_grad():
-        for batch in test_loader:
+        for batch in tqdm(data_loader, desc="Predicting", unit="batch"):
             outputs = model(**batch)
             preds = outputs.logits.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
