@@ -9,13 +9,13 @@ Sample usage:
 
 python src/translate.py \
 --model="facebook/nllb-200-distilled-600M" \
---dataset="ZurichNLP/x_stance" \
---split="test" \
---src_lang="deu_Latn" \
---tgt_lang="fra_Latn" \
+--dataset="translations/it2fr.csv" \
+--split="train" \
+--src_lang="fra_Latn" \
+--tgt_lang="ita_Latn" \
 --batch_size=128 \
 --max_len=128 \
---output_file="translations/de2fr.csv"
+--output_file="translations/it2fr2it.csv"
 """
 
 import argparse
@@ -38,6 +38,7 @@ def create_parser():
     parser.add_argument('--split', required=True, type=str, help='Dataset split')
     parser.add_argument('--src_lang', required=True, type=str, help='Source language')
     parser.add_argument('--tgt_lang', required=True, type=str, help='Target language')
+    parser.add_argument('--filter', action='store_true', help='Filter dataset by source language')
     parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     parser.add_argument('--output_file', default='translations.csv', type=str, help='Output directory')
@@ -54,9 +55,15 @@ def main(args):
 
     # Prepare inputs
     print('Preparing inputs...')
-    dataset = load_dataset(args.dataset, split=args.split)
-    filtered_dataset = dataset.filter(lambda x: x['language'] == args.src_lang[:2])
-    data_loader = torch.utils.data.DataLoader(filtered_dataset, batch_size=args.batch_size)
+    if args.dataset.endswith('.csv'):
+        dataset = load_dataset('csv', data_files=args.dataset, split=args.split)
+    else:
+        dataset = load_dataset(args.dataset, split=args.split)
+    
+    if args.filter:
+        dataset = dataset.filter(lambda x: x['language'] == args.src_lang[:2])
+
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Translate
     questions, comments = [], []
@@ -73,11 +80,11 @@ def main(args):
         comments.extend(tokenizer.batch_decode(translated_c, skip_special_tokens=True))
     
     # Replace old values with new translations
-    filtered_dataset = filtered_dataset.map(lambda example, idx: {
+    translated_ds = dataset.map(lambda example, idx: {
         "question": questions[idx], 
         "comment": comments[idx]
         }, with_indices=True)
-    filtered_dataset.to_csv(args.output_file, index=False)
+    translated_ds.to_csv(args.output_file, index=False)
     print(f'Translations saved to {args.output_file}')
 
     return
