@@ -87,9 +87,9 @@ def predict(args):
                 preds = outputs.logits.argmax(dim=-1).cpu().numpy()
             else:
                 # For vanilla model, use the custom classification head
-                outputs = base_model(**batch)
-                hidden_states = outputs.last_hidden_state  # Shape: [batch_size, seq_length, hidden_dim]
-                cls_token = hidden_states[:, 0, :]  # Shape: [batch_size, hidden_dim]
+                outputs = base_model(**batch, output_hidden_states=True)
+                final_hidden_state = outputs.hidden_states[-1]  # Shape: [batch_size, seq_length, hidden_dim]
+                cls_token = final_hidden_state[:, 0, :]  # Shape: [batch_size, hidden_dim]
                 probs = model(cls_token)
                 preds = probs.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
