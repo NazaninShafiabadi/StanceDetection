@@ -6,6 +6,7 @@ python src/predict.py \
 --test_file="data/xstance/test.jsonl" \
 --output_file="predictions/bi_test_preds.csv" \
 --batch_size=128 \
+--label_column='label' \
 --label_mapping_file='models/binary_stance_classifier/label_mapping.json' \
 --is_finetuned
 """
@@ -32,8 +33,7 @@ def create_parser():
     parser.add_argument('--output_file', default='predictions.csv', type=str, help='File to save predictions')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
-    parser.add_argument('--ignore_questions', action='store_true', help='Ignore questions during tokenization')
-    parser.add_argument('--ignore_comments', action='store_true', help='Ignore comments during tokenization')
+    parser.add_argument('--label_column', default=None, type=str, help='Label column name')
     parser.add_argument('--num_labels', default=2, type=int, help='Number of labels')
     parser.add_argument('--label_mapping_file', default=None, type=str, help='Path to label mapping file')
     parser.add_argument('--is_finetuned', action='store_true', help='Flag for using fine-tuned model')
@@ -64,17 +64,13 @@ def predict(args):
         base_model = AutoModelForSequenceClassification.from_pretrained(args.model).to(DEVICE)
         model = StanceDetectionHead(input_dim=base_model.config.hidden_size, num_labels=args.num_labels).to(DEVICE)
 
-    input_preprocessor = InputPreprocessor(tokenizer, 
-                                           max_len=args.max_len, 
-                                           ignore_questions=args.ignore_questions, 
-                                           ignore_comments=args.ignore_comments, 
-                                           device=DEVICE)
+    input_preprocessor = InputPreprocessor(tokenizer, max_len=args.max_len, device=DEVICE)
     
     if args.label_mapping_file:
         # Load label mapping
         input_preprocessor.load_label_mapping(args.label_mapping_file)
     
-    dataset = input_preprocessor.process(args.test_file)
+    dataset = input_preprocessor.process(args.test_file, label_column=args.label_column)
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Make predictions
@@ -94,10 +90,11 @@ def predict(args):
                 preds = probs.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
     
-    # Convert predictions back to original label names
-    label_mapping = input_preprocessor.label_mapping  # {label_name: index}
-    reverse_label_mapping = {v: k for k, v in label_mapping.items()}
-    predictions = [reverse_label_mapping[pred] for pred in predictions]
+    if args.label_column:
+        # Convert predictions back to original label names
+        label_mapping = input_preprocessor.label_mapping  # {label_name: index}
+        reverse_label_mapping = {v: k for k, v in label_mapping.items()}
+        predictions = [reverse_label_mapping[pred] for pred in predictions]
     
     # Save predictions to output file
     df = read_data_to_df(args.test_file)
