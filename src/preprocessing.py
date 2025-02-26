@@ -72,11 +72,9 @@ class InputPreprocessor:
         
         return balanced_df.sample(frac=1).reset_index(drop=True)    # shuffle the rows
     
-    def _tokenize_and_combine(self, row: pd.Series) -> List[int]:
-        target_tokens = (self.tokenizer.encode(row['target'], add_special_tokens=False) 
-                           if 'target' in row else [])
-        comment_tokens = (self.tokenizer.encode(row['comment'], add_special_tokens=False) 
-                          if 'comment' in row else [])
+    def _process_inputs(self, targets: pd.Series, comments: pd.Series) -> List[int]:
+        target_tokens = self.tokenizer.encode(targets, add_special_tokens=False)
+        comment_tokens = self.tokenizer.encode(comments, add_special_tokens=False)
         sep_token = [self.tokenizer.sep_token_id] if target_tokens and comment_tokens else []
         
         # # truncate the question tokens if the combined length exceeds max_len
@@ -95,16 +93,16 @@ class InputPreprocessor:
             self.label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
         return labels.map(self.label_mapping).tolist()
     
-    def process(self, file, label_column: Union[str, None] = None, balance_by: Optional[List[str]] = None) -> Dataset:
+    def process(self, file, target_col:str, comment_col:str, label_col: Union[str, None] = None, balance_by: Optional[List[str]] = None) -> Dataset:
         df = read_data_to_df(file)
 
         if balance_by:
             df = self.balance_df(df, balance_by)
         
-        token_list = df.apply(self._tokenize_and_combine, axis=1).tolist()
+        token_list = df.apply(lambda row: self._process_inputs(row[target_col], row[comment_col]), axis=1).tolist()
         padded_tokens = self.tokenizer.pad({'input_ids': token_list}, padding='longest')
         
-        labels = self._process_labels(df[label_column]) if label_column else None
+        labels = self._process_labels(df[label_col]) if label_col else None
 
         dataset = Dataset.from_dict({ 
             "input_ids": padded_tokens["input_ids"], 
