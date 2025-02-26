@@ -52,59 +52,40 @@ def read_data_to_df(file_path):
 #     return dfs
 
 
-def balance_df(df, columns:List, rs=42):
-    # minimum count of rows for any combination of values in the specified columns
-    min_count = df.groupby(columns).size().min()
-    
-    # sample min_count rows for each column combination
-    balanced_df = (
-        df.groupby(columns)
-          .apply(lambda group: group.sample(min_count, random_state=rs))
-          .reset_index(drop=True)
-    )
-    
-    return balanced_df.sample(frac=1).reset_index(drop=True)    # shuffle the rows
-
-
-# def preprocess(df, columns_to_keep=['comment', 'label'], encode_label=True):
-#     preprocessed_df = df[columns_to_keep]
-#     if encode_label:
-#         preprocessed_df.loc[:, 'label'] = preprocessed_df['label'].map({'FAVOR': 1, 'AGAINST': 0})
-#     return preprocessed_df
-
-
-# def tokenize(sentences:List, tokenizer, labels=None, device='cpu'):
-#     inputs = tokenizer(sentences, 
-#                        truncation=True,
-#                        padding=True,
-#                        max_length=128,
-#                        return_tensors="pt").to(device)
-#     if labels:
-#         inputs['labels'] = torch.tensor(labels).to(device)
-#     return inputs
-
-
 class InputPreprocessor:
-    def __init__(self, tokenizer, max_len: int = 512, ignore_questions=False, ignore_comments=False, device='cpu'):
+    def __init__(self, tokenizer, max_len: int = 512, device='cpu'):
         self.tokenizer = tokenizer
         self.max_len = max_len
-        self.ignore_questions = ignore_questions
-        self.ignore_comments = ignore_comments
         self.device = device
         self.label_mapping = None # storing the label mapping for consistency across train and test data
 
-    def _tokenize_and_combine(self, row: pd.Series) -> List[int]:
-        question_tokens = (self.tokenizer.encode(row['question'], add_special_tokens=False) 
-                           if 'question' in row and not self.ignore_questions else [])
-        comment_tokens = (self.tokenizer.encode(row['comment'], add_special_tokens=False) 
-                          if 'comment' in row and not self.ignore_comments else [])
-        sep_token = [self.tokenizer.sep_token_id] if question_tokens and comment_tokens else []
+    def balance_df(self, df, columns:List, rs=42):
+        # minimum count of rows for any combination of values in the specified columns
+        min_count = df.groupby(columns).size().min()
         
-        # truncate the question tokens if the combined length exceeds max_len
-        if len(question_tokens + sep_token + comment_tokens) > self.max_len:
-            tokens = question_tokens[:self.max_len - len(sep_token + comment_tokens)] + sep_token + comment_tokens
-        else: 
-            tokens = question_tokens + sep_token + comment_tokens
+        # sample min_count rows for each column combination
+        balanced_df = (
+            df.groupby(columns)
+            .apply(lambda group: group.sample(min_count, random_state=rs))
+            .reset_index(drop=True)
+        )
+        
+        return balanced_df.sample(frac=1).reset_index(drop=True)    # shuffle the rows
+    
+    def _tokenize_and_combine(self, row: pd.Series) -> List[int]:
+        target_tokens = (self.tokenizer.encode(row['target'], add_special_tokens=False) 
+                           if 'target' in row else [])
+        comment_tokens = (self.tokenizer.encode(row['comment'], add_special_tokens=False) 
+                          if 'comment' in row else [])
+        sep_token = [self.tokenizer.sep_token_id] if target_tokens and comment_tokens else []
+        
+        # # truncate the question tokens if the combined length exceeds max_len
+        # if len(target_tokens + sep_token + comment_tokens) > self.max_len:
+        #     tokens = target_tokens[:self.max_len - len(sep_token + comment_tokens)] + sep_token + comment_tokens
+        # else: 
+        #     tokens = target_tokens + sep_token + comment_tokens
+        tokens = target_tokens + sep_token + comment_tokens
+        tokens = tokens[:self.max_len]
         
         return tokens
     
@@ -118,18 +99,13 @@ class InputPreprocessor:
         df = read_data_to_df(file)
 
         if balance_by:
-            df = balance_df(df, balance_by)
+            df = self.balance_df(df, balance_by)
         
         token_list = df.apply(self._tokenize_and_combine, axis=1).tolist()
         padded_tokens = self.tokenizer.pad({'input_ids': token_list}, padding='longest')
         
         labels = self._process_labels(df[label_column]) if label_column else None
 
-        # dataset = Dataset.from_dict({
-        #     'input_ids': padded_tokens['input_ids'], 
-        #     'attention_mask': padded_tokens['attention_mask'], 
-        #     'labels': labels
-        #     })
         dataset = Dataset.from_dict({ 
             "input_ids": padded_tokens["input_ids"], 
             "attention_mask": padded_tokens["attention_mask"], 
