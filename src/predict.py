@@ -2,12 +2,14 @@
 Sample usage:
 
 python src/predict.py \
---model='models/binary_stance_classifier/best_model' \
+--model='models/xlmr+xstance/best_model' \
 --test_file="data/xstance/test.jsonl" \
---output_file="predictions/bi_test_preds.csv" \
+--output_file="predictions/xlmr+xstance_preds.csv" \
 --batch_size=128 \
---label_column='label' \
---label_mapping_file='models/binary_stance_classifier/label_mapping.json' \
+--target_column="question" \
+--comment_column="comment" \
+--label_column="label" \
+--label_mapping_file='models/xlmr+xstance/label_mapping.pickle' \
 --is_finetuned
 """
 
@@ -33,7 +35,9 @@ def create_parser():
     parser.add_argument('--output_file', default='predictions.csv', type=str, help='File to save predictions')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
-    parser.add_argument('--label_column', default=None, type=str, help='Label column name')
+    parser.add_argument('--target_column', default='target', type=str, help='Target column name')
+    parser.add_argument('--comment_column', default='comment', type=str, help='Comment column name')
+    parser.add_argument('--label_column', default='label', type=str, help='Label column name')
     parser.add_argument('--num_labels', default=2, type=int, help='Number of labels')
     parser.add_argument('--label_mapping_file', default=None, type=str, help='Path to label mapping file')
     parser.add_argument('--is_finetuned', action='store_true', help='Flag for using fine-tuned model')
@@ -70,7 +74,7 @@ def predict(args):
         # Load label mapping
         input_preprocessor.load_label_mapping(args.label_mapping_file)
     
-    dataset = input_preprocessor.process(args.test_file, label_column=args.label_column)
+    dataset = input_preprocessor.process(args.test_file, args.target_column, args.comment_column, args.label_column)
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Make predictions
