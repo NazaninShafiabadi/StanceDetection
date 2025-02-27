@@ -11,6 +11,21 @@ python src/finetune.py \
 --max_len=128 \
 --num_epochs=10 \
 --batch_size=128
+
+python src/finetune.py \
+--model="/lustre/fsmisc/dataset/HuggingFace_Models/xlm-roberta-base" \
+--tokenizer="/lustre/fsmisc/dataset/HuggingFace_Models/xlm-roberta-base" \
+--train_file="data/xstance/train.jsonl" \
+--val_file="data/xstance/valid.jsonl" \
+--output_dir="models/xlmr+xstance" \
+--balance_by language label \
+--max_len=128 \
+--target_column="question" \
+--comment_column="comment" \
+--label_column="label" \
+--num_labels=2 \
+--num_epochs=10 \
+--batch_size=128
 """
 
 
@@ -74,33 +89,33 @@ def compute_metrics(average_method):
 
 
 def main(args):
-    # Verify if the model path is a local file
-    if os.path.exists(args.model):
-        print("Loading model from local checkpoint...")
-        # Load model configuration from Hugging Face Hub
-        config = AutoConfig.from_pretrained(args.tokenizer)
+    # # Verify if the model path is a local file
+    # if os.path.exists(args.model):
+    #     print("Loading model from local checkpoint...")
+    #     # Load model configuration from Hugging Face Hub
+    #     config = AutoConfig.from_pretrained(args.tokenizer)
         
-        # Initialize the model from configuration
-        model = AutoModelForSequenceClassification.from_config(config=config)
+    #     # Initialize the model from configuration
+    #     model = AutoModelForSequenceClassification.from_config(config=config)
         
-        # Load the weights from the local checkpoint
-        checkpoint = torch.load(args.model, map_location=DEVICE)
-        model.load_state_dict(checkpoint['state_dict'])
-        model.to(DEVICE)
-    else:
-        print("Loading model from Hugging Face Hub...")
-        model = AutoModelForSequenceClassification.from_pretrained(
-            args.model,
-            num_labels=args.num_labels
-        ).to(DEVICE)
+    #     # Load the weights from the local checkpoint
+    #     checkpoint = torch.load(args.model, map_location=DEVICE)
+    #     model.load_state_dict(checkpoint['state_dict'])
+    #     model.to(DEVICE)
+    # else:
+    #     print("Loading model from Hugging Face Hub...")
+    #     model = AutoModelForSequenceClassification.from_pretrained(
+    #         args.model,
+    #         num_labels=args.num_labels
+    #     ).to(DEVICE)
     
     # Load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
-    # model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=args.num_labels).to(DEVICE)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=args.num_labels).to(DEVICE)
 
     input_preprocessor = InputPreprocessor(tokenizer, max_len=args.max_len, device=DEVICE)
-    trainset = input_preprocessor.process(args.train_file, label_column=args.label_column, balance_by=args.balance_by)
-    validset = input_preprocessor.process(args.val_file, label_column=args.label_column)
+    trainset = input_preprocessor.process(args.train_file, args.target_column, args.comment_column, args.label_column, balance_by=args.balance_by)
+    validset = input_preprocessor.process(args.val_file, args.target_column, args.comment_column, args.label_column)
     
     training_args = TrainingArguments(
     output_dir=args.output_dir,

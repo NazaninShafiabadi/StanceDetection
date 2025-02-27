@@ -17,3 +17,7 @@ venv/
 
 # Other files
 draft.ipynb
+
+# run logs
+mlruns/
+wandb/
