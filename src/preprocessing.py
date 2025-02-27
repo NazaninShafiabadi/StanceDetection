@@ -65,7 +65,7 @@ class InputPreprocessor:
         
         # sample min_count rows for each column combination
         balanced_df = (
-            df.groupby(columns)
+            df.groupby(columns)[df.columns]
             .apply(lambda group: group.sample(min_count, random_state=rs))
             .reset_index(drop=True)
         )
