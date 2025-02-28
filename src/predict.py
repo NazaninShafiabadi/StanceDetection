@@ -2,9 +2,9 @@
 Sample usage:
 
 python src/predict.py \
---model='models/xlmr+xstance/best_model' \
+--model='models/xlmr+xstance+cofe/best_model' \
 --test_file="data/xstance/test.jsonl" \
---output_file="predictions/xlmr+xstance_preds.csv" \
+--output_file="predictions/xlmr+xstance+cofe_preds.csv" \
 --batch_size=128 \
 --target_column="question" \
 --comment_column="comment" \
@@ -37,7 +37,7 @@ def create_parser():
     parser.add_argument('--max_len', default=512, type=int, help='Maximum sequence length')
     parser.add_argument('--target_column', default='target', type=str, help='Target column name')
     parser.add_argument('--comment_column', default='comment', type=str, help='Comment column name')
-    parser.add_argument('--label_column', default='label', type=str, help='Label column name')
+    parser.add_argument('--label_column', default=None, type=str, help='Label column name')
     parser.add_argument('--num_labels', default=2, type=int, help='Number of labels')
     parser.add_argument('--label_mapping_file', default=None, type=str, help='Path to label mapping file')
     parser.add_argument('--is_finetuned', action='store_true', help='Flag for using fine-tuned model')
@@ -71,7 +71,6 @@ def predict(args):
     input_preprocessor = InputPreprocessor(tokenizer, max_len=args.max_len, device=DEVICE)
     
     if args.label_mapping_file:
-        # Load label mapping
         input_preprocessor.load_label_mapping(args.label_mapping_file)
     
     dataset = input_preprocessor.process(args.test_file, args.target_column, args.comment_column, args.label_column)
@@ -94,7 +93,7 @@ def predict(args):
                 preds = probs.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
     
-    if args.label_column:
+    if args.label_mapping_file or args.label_column:
         # Convert predictions back to original label names
         label_mapping = input_preprocessor.label_mapping  # {label_name: index}
         reverse_label_mapping = {v: k for k, v in label_mapping.items()}
