@@ -45,15 +45,17 @@ def create_parser():
 
 
 # Custom classification head for vanilla models (not fine-tuned)
-class StanceDetectionHead(nn.Module):
-    def __init__(self, input_dim, num_labels):
-        super(StanceDetectionHead, self).__init__()
-        self.linear = nn.Linear(input_dim, num_labels)  # Classifier head
-        self.softmax = nn.Softmax(dim=1)
+class StanceDetectionModel(nn.Module):
+    def __init__(self, model_name, num_labels):
+        super(StanceDetectionModel, self).__init__()
+        self.base_model = AutoModel.from_pretrained(model_name)  # Use encoder-only model
+        self.classifier = nn.Linear(self.base_model.config.hidden_size, num_labels)  # Custom head
 
-    def forward(self, x):
-        logits = self.linear(x)
-        return self.softmax(logits)
+    def forward(self, inputs):
+        outputs = self.base_model(**inputs)
+        pooled_output = outputs.last_hidden_state[:, 0, :]  # Use [CLS] token representation
+        logits = self.classifier(pooled_output)
+        return logits
 
 
 def predict(args):  
@@ -65,8 +67,7 @@ def predict(args):
         model = AutoModelForSequenceClassification.from_pretrained(args.model).to(DEVICE)
     else:
         # Load the base model (vanilla, not fine-tuned)
-        base_model = AutoModelForSequenceClassification.from_pretrained(args.model).to(DEVICE)
-        model = StanceDetectionHead(input_dim=base_model.config.hidden_size, num_labels=args.num_labels).to(DEVICE)
+        model = StanceDetectionModel(args.model, num_labels=args.num_labels).to(DEVICE)
 
     input_preprocessor = InputPreprocessor(tokenizer, max_len=args.max_len, device=DEVICE)
     

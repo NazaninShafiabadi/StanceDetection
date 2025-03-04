@@ -9,23 +9,12 @@ python src/finetune.py \
 --output_dir="models/binary_stance_classifier" \
 --balance_by language label \
 --max_len=128 \
+--target_column="question" \
+--comment_column="comment" \
+--label_column="label" \
 --num_epochs=10 \
 --batch_size=128
 
-python src/finetune.py \
---model="models/xlmr+xstance/best_model" \
---train_file="data/CoFE/CoFE_train_filtered.csv" \
---val_file="data/CoFE/CoFE_valid_filtered.csv" \
---output_dir="models/xlmr+xstance+cofe" \
---balance_by lan_cm label \
---max_len=128 \
---target_column="title" \
---comment_column="comment" \
---label_column="label" \
---num_labels=2 \
---num_epochs=10 \
---batch_size=64 \
---label_mapping_file='models/cofe_label_map.pickle'
 """
 
 
