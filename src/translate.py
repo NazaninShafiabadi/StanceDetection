@@ -15,7 +15,7 @@ python src/translate.py \
 --tgt_lang="ita_Latn" \
 --batch_size=128 \
 --max_len=128 \
---output_file="translations/it2fr2it.csv"
+--output_file="translations/it2fr2it_test.csv"
 """
 
 import argparse
@@ -49,7 +49,7 @@ def main(args):
     # Load the model and tokenizer
     print('Loading model and tokenizer...')
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model, src_lang=args.src_lang
+        args.model  #, src_lang=args.src_lang
     )
     model = AutoModelForSeq2SeqLM.from_pretrained(args.model).to(DEVICE)
 

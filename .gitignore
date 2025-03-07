@@ -1,5 +1,5 @@
 # Data files
-# data/
+data/
 
 # Model outputs
 models/
@@ -17,6 +17,7 @@ venv/
 
 # Other files
 draft.ipynb
+dataset_curation.ipynb
 
 # run logs
 mlruns/
