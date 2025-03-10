@@ -2,15 +2,25 @@
 Sample usage:
 
 python src/predict.py \
---model='models/xlmr+xstance+cofe/best_model' \
---test_file="data/xstance/test.jsonl" \
---output_file="predictions/xlmr+xstance+cofe_preds.csv" \
+--model='models/xlmr+xstance/best_model' \
+--test_file="data/CoFE/CoFE_test_filtered.csv" \
+--output_file="predictions/on_cofe_test/xlmr+xstance_preds.csv" \
 --batch_size=128 \
---target_column="question" \
+--target_column="title" \
 --comment_column="comment" \
 --label_column="label" \
---label_mapping_file='models/xlmr+xstance/label_mapping.pickle' \
+--label_mapping_file='predictions/on_cofe_test/cofe_label_map.pickle' \
 --is_finetuned
+
+python src/predict.py \
+--model='/lustre/fsmisc/dataset/HuggingFace_Models/xlm-roberta-base' \
+--test_file="data/CoFE/CoFE_test_filtered.csv" \
+--output_file="predictions/on_cofe_test/vanilla_XLM-R_preds.csv" \
+--batch_size=128 \
+--target_column="title" \
+--comment_column="comment" \
+--label_column="label" \
+--label_mapping_file='predictions/on_cofe_test/cofe_label_map.pickle' \
 """
 
 import argparse
@@ -44,30 +54,31 @@ def create_parser():
     return parser
 
 
-# Custom classification head for vanilla models (not fine-tuned)
-class StanceDetectionModel(nn.Module):
-    def __init__(self, model_name, num_labels):
-        super(StanceDetectionModel, self).__init__()
-        self.base_model = AutoModel.from_pretrained(model_name)  # Use encoder-only model
-        self.classifier = nn.Linear(self.base_model.config.hidden_size, num_labels)  # Custom head
+# # Custom classification head for vanilla models (not fine-tuned)
+# class StanceDetectionModel(nn.Module):
+#     def __init__(self, model_name, num_labels):
+#         super(StanceDetectionModel, self).__init__()
+#         self.base_model = AutoModel.from_pretrained(model_name)  # Use encoder-only model
+#         self.classifier = nn.Linear(self.base_model.config.hidden_size, num_labels)  # Custom head
 
-    def forward(self, inputs):
-        outputs = self.base_model(**inputs)
-        pooled_output = outputs.last_hidden_state[:, 0, :]  # Use [CLS] token representation
-        logits = self.classifier(pooled_output)
-        return logits
+#     def forward(self, inputs):
+#         outputs = self.base_model(**inputs)
+#         pooled_output = outputs.last_hidden_state[:, 0, :]  # Use [CLS] token representation
+#         logits = self.classifier(pooled_output)
+#         return logits
 
 
 def predict(args):  
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
+    model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=args.num_labels).to(DEVICE)
     
-    # Check if model is fine-tuned or vanilla (pre-trained)
-    if args.is_finetuned:
-        model = AutoModelForSequenceClassification.from_pretrained(args.model).to(DEVICE)
-    else:
-        # Load the base model (vanilla, not fine-tuned)
-        model = StanceDetectionModel(args.model, num_labels=args.num_labels).to(DEVICE)
+    # # Check if model is fine-tuned or vanilla (pre-trained)
+    # if args.is_finetuned:
+    #     model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=args.num_labels).to(DEVICE)
+    # else:
+    #     # Load the base model (vanilla, not fine-tuned)
+    #     model = StanceDetectionModel(args.model, num_labels=args.num_labels).to(DEVICE)
 
     input_preprocessor = InputPreprocessor(tokenizer, max_len=args.max_len, device=DEVICE)
     
@@ -82,16 +93,16 @@ def predict(args):
     predictions = []
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Predicting", unit="batch"):
-            if args.is_finetuned:
-                outputs = model(**batch)
-                preds = outputs.logits.argmax(dim=-1).cpu().numpy()
-            else:
-                # For vanilla model, use the custom classification head
-                outputs = base_model(**batch, output_hidden_states=True)
-                final_hidden_state = outputs.hidden_states[-1]  # Shape: [batch_size, seq_length, hidden_dim]
-                cls_token = final_hidden_state[:, 0, :]  # Shape: [batch_size, hidden_dim]
-                probs = model(cls_token)
-                preds = probs.argmax(dim=-1).cpu().numpy()
+            # if args.is_finetuned:
+            outputs = model(**batch)
+            preds = outputs.logits.argmax(dim=-1).cpu().numpy()
+            # else:
+            #     # For vanilla model, use the custom classification head
+            #     outputs = base_model(**batch, output_hidden_states=True)
+            #     final_hidden_state = outputs.hidden_states[-1]  # Shape: [batch_size, seq_length, hidden_dim]
+            #     cls_token = final_hidden_state[:, 0, :]  # Shape: [batch_size, hidden_dim]
+            #     probs = model(cls_token)
+            #     preds = probs.argmax(dim=-1).cpu().numpy()
             predictions.extend(preds)
     
     if args.label_mapping_file or args.label_column:

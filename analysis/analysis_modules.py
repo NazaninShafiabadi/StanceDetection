@@ -1,5 +1,5 @@
 import os, glob
-from typing import List
+from typing import List, Union
 from scipy.stats import norm
 import pandas as pd
 import json
@@ -7,12 +7,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def compute_accuracy(preds_df, gold_column, pred_column):
-    return preds_df.groupby('language')[[gold_column, pred_column]]\
-        .apply(lambda x: (x[gold_column] == x[pred_column])\
-               .mean())\
-                .reset_index()\
-                    .rename(columns={0: 'accuracy'})
+def compute_accuracy(df, gold_column, pred_column=None, group_by:Union[List, str]='language', baseline=False):
+    if baseline:
+        MFC = df[gold_column].mode()[0]
+        accuracy = df.groupby(group_by)[gold_column].apply(lambda x: (x == MFC).mean())
+    else: 
+        if not pred_column:
+            raise ValueError("pred_column must be specified when baseline is False.")
+        accuracy = df.groupby(group_by)[[gold_column, pred_column]].apply(
+            lambda x: (x[gold_column] == x[pred_column]).mean()
+        )
+    return accuracy.reset_index(name='accuracy')
+
+
+def add_accuracy_diff(acc_df, baseline_col: str):
+    df = acc_df.copy()
+    df[baseline_col] = df[baseline_col].round(2)    
+    for col in df.select_dtypes(include='number').columns:
+        if col != baseline_col:
+            df[col] = df.apply(lambda row: f"{row[col]:.2f} ({row[col] - row[baseline_col]:+.2f})", axis=1)
+    return df
 
 
 def plot(df):
