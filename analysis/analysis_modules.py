@@ -20,37 +20,48 @@ def compute_accuracy(df, gold_column, pred_column=None, group_by:Union[List, str
     return accuracy.reset_index(name='accuracy')
 
 
-def add_accuracy_diff(acc_df, baseline_col: str):
+def add_accuracy_diff(acc_df, baseline_col: str, diff_mode='baseline'):
+    """
+    Adds accuracy difference annotations to a DataFrame.
+    
+    baseline_col: either the first numerical column (in 'previous' mode) or the column 
+    against which to compare all other columns (in 'baseline' mode)
+    diff_mode: either 'baseline' or 'previous'
+    """
+    # Validate diff_mode
+    if diff_mode not in ['baseline', 'previous']:
+        raise ValueError("diff_mode must be either 'baseline' or 'previous'.")
+
+    # Check if the baseline column exists
+    if baseline_col not in acc_df.columns:
+        raise ValueError(f"Column '{baseline_col}' not found in the DataFrame.")
+
+    # Check if the baseline column is numeric (if using 'baseline' mode)
+    if diff_mode == 'baseline' and not pd.api.types.is_numeric_dtype(acc_df[baseline_col]):
+        raise ValueError(f"Baseline column '{baseline_col}' must be numeric.")
+
+    # Check if the DataFrame has at least two numerical columns for 'previous' mode
+    num_cols = acc_df.select_dtypes(include='number').columns
+    if diff_mode == 'previous' and len(num_cols) < 2:
+        raise ValueError("At least two numerical columns are required for 'previous' mode.")
+
     df = acc_df.copy()
-    df[baseline_col] = df[baseline_col].round(2)    
-    for col in df.select_dtypes(include='number').columns:
-        if col != baseline_col:
-            df[col] = df.apply(lambda row: f"{row[col]:.2f} ({row[col] - row[baseline_col]:+.2f})", axis=1)
-    return df
+    df[num_cols] = (df[num_cols] * 100).round(2)
 
+    # Create a new DataFrame to store formatted values
+    formatted_df = df.copy()
 
-def plot(df):
-    topics = df.index
-    languages = df.columns
-    x = np.arange(len(topics))  # label locations
-    width = 0.2  # bar width
+    for i, col in enumerate(num_cols):
+        if col == baseline_col:
+            continue
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    colors = {'de': 'indianred', 'fr': 'royalblue', 'it': 'seagreen'}
+        ref_col = baseline_col if diff_mode == 'baseline' else num_cols[i - 1]
+        formatted_df[col] = df.apply(lambda row: f"{row[col]:.2f}% ({row[col] - row[ref_col]:+.2f}%)", axis=1)
 
-    # Plot bars for each language
-    for i, lang in enumerate(languages):
-        ax.bar(x + i * width, df[lang], width, color=colors[lang], label=lang)
-
-    ax.set_xlabel("Topic")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Performance by Topic and Language")
-    ax.set_xticks(x + width, topics, rotation=45, ha="right")
-    ax.legend(loc='upper center', ncol=len(languages))
-    ax.grid(axis="y", linestyle="--", alpha=0.7)
-
-    plt.tight_layout()
-    plt.show()
+    # Format the baseline column
+    formatted_df[baseline_col] = df[baseline_col].apply(lambda x: f"{x}%")
+    
+    return formatted_df
 
 
 def plot_metrics(model_dir):
